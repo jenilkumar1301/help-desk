@@ -61,3 +61,28 @@ header, .section-heading, .form-heading { display: flex; justify-content: space-
 .error { padding: 12px; background: #fff0ee; color: #a32f27; border-radius: 8px; margin-bottom: 16px; }
 @media (max-width: 1000px) { aside { width: 205px; } .dashboard { padding: 24px; } .section-heading { align-items: stretch; flex-direction: column; } }
 @media (max-width: 700px) { .app-shell { flex-direction: column; } aside { width: 100%; border-right: 0; padding: 16px; } nav { margin-top: 16px; } .profile { padding-top: 16px; } .dashboard { padding: 20px 14px; } header { align-items: flex-start; flex-direction: column; } .stats { gap: 8px; } .stats article { padding: 14px; } .stat-icon { display: none; } .stats strong { font-size: 26px; } .ticket { flex-direction: column; } .form-row, .filters { flex-direction: column; } .filters input { max-width: none; } .tickets, .ticket-form { padding: 20px; } }
+
+fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+fieldset.form-row label { min-width: 0; }
+.hint { font-size: 12px; }
+.detail-heading { margin: 24px 0 16px; }
+.detail-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 32px; margin-top: 32px; }
+.detail-grid > section { min-width: 0; }
+.preserve { white-space: pre-wrap; overflow-wrap: anywhere; }
+.comment { border-top: 1px solid #e2e7ef; padding: 16px 0; }
+.timeline { padding-left: 20px; }
+.timeline li { margin-bottom: 20px; font-size: 13px; }
+.timeline small { display: block; margin-top: 6px; }
+.ticket-title { border: 0; padding: 0; text-align: left; color: #235bd0; font-weight: 650; background: transparent; }
+.table-scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 16px 12px; border-bottom: 1px solid #e2e7ef; max-width: 260px; overflow-wrap: anywhere; }
+th { background: #f4f6fa; color: #657187; font-size: 12px; }
+.role-form { display: flex; gap: 12px; align-items: center; }
+.role-form label { margin: 0; }
+.profile { margin-bottom: 16px; }
+.dashboard > .tickets, .dashboard > .ticket-form { margin-top: 24px; }
+.form-row label { min-width: 0; }
+.assigned, .in_progress { background: #fff5df; color: #8e641a; }
+.resolved, .closed, .available { background: #e5f7ee; color: #187c58; }
+@media(max-width: 800px) { .detail-grid { grid-template-columns: 1fr; } }

@@ -1,123 +1,86 @@
-import { useEffect, useMemo, useState } from "react";
-import { api } from "./api";
+import { useEffect, useState } from "react";
+import { api, clearSession } from "./api";
+import Auth from "./components/Auth";
+import TicketForm from "./components/TicketForm";
+import TicketDetail from "./components/TicketDetail";
+import Assets from "./components/Assets";
+import Users from "./components/Users";
+import { Badge, ErrorMessage, Options, priorities, statuses, categories, date } from "./components/shared";
 
-const categories = ["Hardware", "Software", "Network", "Access", "Other"];
-const priorities = ["low", "medium", "high", "urgent"];
-
-function Auth({ onAuthenticated }) {
-  const [register, setRegister] = useState(false);
-  const [error, setError] = useState("");
-
-  async function submit(event) {
-    event.preventDefault();
-    const values = Object.fromEntries(new FormData(event.currentTarget));
-    try {
-      const result = await api(`/auth/${register ? "register" : "login"}`, {
-        method: "POST",
-        body: JSON.stringify(values)
-      });
-      localStorage.setItem("helpDeskToken", result.token);
-      localStorage.setItem("helpDeskUser", JSON.stringify(result.user));
-      onAuthenticated(result.user);
-    } catch (err) {
-      setError(err.message);
-    }
-  }
-
-  return <main className="auth-page">
-    <section className="auth-card">
-      <div className="brand-mark">HD</div>
-      <h1>{register ? "Create your account" : "Welcome back"}</h1>
-      <p>{register ? "Start submitting and tracking IT requests." : "Sign in to your support workspace."}</p>
-      <form onSubmit={submit}>
-        {register && <label>Full name<input name="name" required /></label>}
-        <label>Email<input name="email" type="email" required /></label>
-        <label>Password<input name="password" type="password" minLength="8" required /></label>
-        {error && <div className="error">{error}</div>}
-        <button className="primary">{register ? "Create account" : "Sign in"}</button>
-      </form>
-      <button className="link" onClick={() => { setRegister(!register); setError(""); }}>
-        {register ? "Already registered? Sign in" : "New here? Create an account"}
-      </button>
-    </section>
-  </main>;
-}
-
-function TicketForm({ onCreated, onCancel }) {
-  const [error, setError] = useState("");
-  async function submit(event) {
-    event.preventDefault();
-    const values = Object.fromEntries(new FormData(event.currentTarget));
-    try {
-      onCreated(await api("/tickets", { method: "POST", body: JSON.stringify(values) }));
-    } catch (err) { setError(err.message); }
-  }
-
-  return <form className="ticket-form" onSubmit={submit}>
-    <div className="form-heading"><div><h2>New support request</h2><p>Describe the issue and its impact.</p></div><button type="button" className="icon-button" onClick={onCancel}>×</button></div>
-    <label>Title<input name="title" placeholder="Example: Cannot connect to office Wi-Fi" required /></label>
-    <label>Description<textarea name="description" rows="5" placeholder="What happened, and what have you tried?" required /></label>
-    <div className="form-row">
-      <label>Category<select name="category">{categories.map(x => <option key={x}>{x}</option>)}</select></label>
-      <label>Priority<select name="priority">{priorities.map(x => <option key={x}>{x}</option>)}</select></label>
-    </div>
-    {error && <div className="error">{error}</div>}
-    <div className="actions"><button type="button" onClick={onCancel}>Cancel</button><button className="primary">Submit ticket</button></div>
-  </form>;
-}
-
-function Dashboard({ user, onLogout }) {
-  const [tickets, setTickets] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+function Workspace({ user, onLogout }) {
+  const [page, setPage] = useState("tickets"), [selected, setSelected] = useState(null);
+  const [tickets, setTickets] = useState([]), [error, setError] = useState(""), [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState(""), [status, setStatus] = useState(""), [priority, setPriority] = useState("");
   const [creating, setCreating] = useState(false);
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState("all");
-
+  async function refresh(signal) {
+    setLoading(true); setError("");
+    try { setTickets(await api("/tickets", { signal })); }
+    catch (err) { if (err.name !== "AbortError") setError(err.message); }
+    finally { if (!signal?.aborted) setLoading(false); }
+  }
   useEffect(() => {
-    api("/tickets").then(setTickets).catch(err => setError(err.message)).finally(() => setLoading(false));
+    const controller = new AbortController(); refresh(controller.signal);
+    return () => controller.abort();
   }, []);
-
-  const visible = useMemo(() => tickets.filter(ticket =>
-    (status === "all" || ticket.status === status) &&
-    (ticket.title + ticket.description).toLowerCase().includes(query.toLowerCase())
-  ), [tickets, query, status]);
-
-  const stats = {
-    open: tickets.filter(x => x.status === "open").length,
-    progress: tickets.filter(x => x.status === "in_progress").length,
-    resolved: tickets.filter(x => x.status === "resolved").length
-  };
-
+  function navigate(next) { setPage(next); setSelected(null); setCreating(false); }
+  const visible = tickets.filter(x => (!status || x.status === status) && (!priority || x.priority === priority) &&
+    [x.id, x.title, x.description, x.requester_name, x.assignee_name || ""].join(" ").toLowerCase().includes(query.toLowerCase()));
+  const counts = Object.fromEntries(statuses.map(s => [s, tickets.filter(x => x.status === s).length]));
   return <div className="app-shell">
-    <aside>
-      <div className="brand"><span>HD</span><strong>Help Desk</strong></div>
-      <nav><button className="active" onClick={() => { setCreating(false); setStatus("all"); setQuery(""); }}>▦ Dashboard</button></nav>
-      <div className="profile"><div className="avatar">{user.name[0]}</div><div><strong>{user.name}</strong><small>{user.role}</small></div><button onClick={onLogout} aria-label="Sign out">↪</button></div>
+    <aside><div className="brand"><span>HD</span><strong>Help Desk</strong></div>
+      <nav aria-label="Main navigation">
+        {[["tickets", "Tickets"], ["assets", "Equipment"], ["analytics", "Overview"], ...(user.role === "admin" ? [["users", "People"]] : [])].map(([key, name]) =>
+          <button key={key} className={page === key ? "active" : ""} aria-current={page === key ? "page" : undefined} onClick={() => navigate(key)}>{name}</button>)}
+      </nav>
+      <div className="profile"><div className="avatar">{user.name[0]}</div><div><strong>{user.name}</strong><small>{user.role}</small></div></div>
+      <button onClick={onLogout}>Sign out</button>
     </aside>
     <main className="dashboard">
-      <header><div><p className="eyebrow">SUPPORT CENTER</p><h1>Good day, {user.name.split(" ")[0]}</h1><p>Track requests and keep your work moving.</p></div><button className="primary" onClick={() => setCreating(true)}>＋ New ticket</button></header>
-      <section className="stats">
-        <article><span className="stat-icon blue">●</span><div><small>Open tickets</small><strong>{stats.open}</strong></div></article>
-        <article><span className="stat-icon amber">●</span><div><small>In progress</small><strong>{stats.progress}</strong></div></article>
-        <article><span className="stat-icon green">●</span><div><small>Resolved</small><strong>{stats.resolved}</strong></div></article>
-      </section>
-      {error && <div className="error" role="alert">{error} Try signing in again if your session has expired.</div>}
-      {creating ? <TicketForm onCancel={() => setCreating(false)} onCreated={ticket => { setTickets([ticket, ...tickets]); setCreating(false); }} /> :
-      <section className="tickets">
-        <div className="section-heading"><div><h2>Recent tickets</h2><p>Your latest support activity</p></div><div className="filters"><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search tickets…" /><select value={status} onChange={e => setStatus(e.target.value)}><option value="all">All statuses</option><option value="open">Open</option><option value="in_progress">In progress</option><option value="resolved">Resolved</option><option value="closed">Closed</option></select></div></div>
-        {loading ? <p className="empty">Loading tickets…</p> : visible.length === 0 ? <div className="empty"><strong>No tickets found</strong><p>Create a ticket when you need help from IT.</p></div> :
-        <div className="ticket-list">{visible.map(ticket => <article className="ticket" key={ticket.id}><div><span className="ticket-id">#{String(ticket.id).padStart(4, "0")}</span><h3>{ticket.title}</h3><p>{ticket.description}</p><small>{ticket.category} · {new Date(ticket.created_at.replace(" ", "T") + "Z").toLocaleDateString()}</small></div><div className="badges"><span className={`badge ${ticket.priority}`}>{ticket.priority}</span><span className="badge status">{ticket.status.replace("_", " ")}</span></div></article>)}</div>}
-      </section>}
+      <header><div><p className="eyebrow">SUPPORT CENTER</p><h1>Hello, {user.name.split(" ")[0]}</h1><p>{user.role === "employee" ? "Track your requests and assigned equipment." : "Manage your support queue and equipment."}</p></div>
+        <button className="primary" onClick={() => { navigate("tickets"); setCreating(true); }}>＋ New ticket</button></header>
+      {page === "assets" ? <Assets user={user} /> : page === "users" ? <Users user={user} /> : <>
+        <section className="stats">
+          <article><div><small>Open tickets</small><strong>{loading || error ? "—" : counts.open}</strong></div></article>
+          <article><div><small>In progress</small><strong>{loading || error ? "—" : counts.in_progress}</strong></div></article>
+          <article><div><small>Resolved / closed</small><strong>{loading || error ? "—" : counts.resolved + counts.closed}</strong></div></article>
+        </section>
+        <ErrorMessage error={error} />
+        {page === "analytics" ? <section className="tickets"><div className="section-heading"><h2>Support overview</h2><button onClick={() => refresh()} disabled={loading}>Refresh</button></div>
+          <p>{user.role === "employee" ? "Based on your tickets." : "Based on all tickets."} Counts reflect current status, not historical resolution times.</p>
+          {loading ? <p>Loading…</p> : !error && <><p>{tickets.length} total · {tickets.length ? Math.round((counts.resolved + counts.closed) / tickets.length * 100) : 0}% resolved or closed</p>
+            <div className="detail-grid"><section><h3>By category</h3>{categories.map(c => <p key={c}>{c}: <strong>{tickets.filter(x => x.category === c).length}</strong></p>)}</section>
+            <section><h3>By priority</h3>{priorities.map(p => <p key={p}><Badge value={p} /> <strong>{tickets.filter(x => x.priority === p).length}</strong></p>)}</section></div></>}
+        </section> : creating ? <TicketForm onCancel={() => setCreating(false)} onCreated={ticket => { setTickets(current => [ticket, ...current]); setCreating(false); setSelected(ticket.id); }} /> :
+        selected ? <TicketDetail key={selected} id={selected} user={user} onBack={() => { setSelected(null); refresh(); }}
+          onChanged={ticket => setTickets(current => current.map(x => x.id === ticket.id ? ticket : x))} /> :
+        <section className="tickets"><div className="section-heading"><div><h2>{user.role === "employee" ? "My tickets" : "Support queue"}</h2><p>{visible.length} matching requests</p></div><button onClick={() => refresh()} disabled={loading}>Refresh</button></div>
+          <div className="form-row"><label>Search<input value={query} onChange={e => setQuery(e.target.value)} placeholder="Title, ID, or person" /></label>
+            <label>Status<select value={status} onChange={e => setStatus(e.target.value)}><option value="">All statuses</option><Options values={statuses} /></select></label>
+            <label>Priority<select value={priority} onChange={e => setPriority(e.target.value)}><option value="">All priorities</option><Options values={priorities} /></select></label></div>
+          {loading ? <p className="empty">Loading tickets…</p> : error ? <p>Use Refresh to try again.</p> : visible.length === 0 ? <p className="empty">No tickets match. Create a request or adjust your filters.</p> :
+          visible.map(ticket => <article className="ticket" key={ticket.id}><div><span className="ticket-id">#{ticket.id} · {ticket.category}</span>
+            <h3><button className="ticket-title" onClick={() => setSelected(ticket.id)}>{ticket.title}</button></h3>
+            <p>{ticket.description.slice(0, 160)}{ticket.description.length > 160 ? "…" : ""}</p><small>{ticket.requester_name} · {date(ticket.created_at)} · {ticket.assignee_name || "Unassigned"}</small></div>
+            <div className="badges"><Badge value={ticket.priority} /><Badge value={ticket.status} /></div></article>)}
+        </section>}
+      </>}
     </main>
   </div>;
 }
-
 export default function App() {
-  const [user, setUser] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("helpDeskUser") || "null"); }
-    catch { return null; }
-  });
-  function logout() { localStorage.removeItem("helpDeskToken"); localStorage.removeItem("helpDeskUser"); setUser(null); }
-  return user ? <Dashboard user={user} onLogout={logout} /> : <Auth onAuthenticated={setUser} />;
+  const [user, setUser] = useState(null), [loading, setLoading] = useState(true), [error, setError] = useState("");
+  function logout() { clearSession(); setUser(null); setError(""); }
+  useEffect(() => {
+    const controller = new AbortController();
+    window.addEventListener("session-expired", logout);
+    if (localStorage.getItem("helpDeskToken")) {
+      api("/auth/me", { signal: controller.signal }).then(setUser)
+        .catch(err => { if (err.name !== "AbortError") setError(err.message); })
+        .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    } else setLoading(false);
+    return () => { controller.abort(); window.removeEventListener("session-expired", logout); };
+  }, []);
+  if (loading) return <main className="auth-page"><p>Checking session…</p></main>;
+  if (error) return <main className="auth-page"><section className="auth-card"><ErrorMessage error={error} /><button onClick={logout}>Return to sign in</button></section></main>;
+  return user ? <Workspace user={user} onLogout={logout} /> : <Auth onAuthenticated={setUser} />;
 }
