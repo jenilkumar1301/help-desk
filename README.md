@@ -1,95 +1,137 @@
 # Help Desk
 
-An IT support project using React, Express, and SQLite. Employees can register, submit support requests, and search their tickets.
+A full-stack IT support and equipment management application built with React, Express, and SQLite.
 
-## Current implementation
+Employees submit requests and track their equipment. Technicians triage the support queue, assign work, and record updates. Administrators manage staff access.
 
-- Registration and login with bcrypt password hashing and expiring JWTs
-- Employee-scoped ticket dashboard, search, status filters, and counts
-- Ticket creation with category and priority
-- Technician-only ticket updates through the API
-- Ticket comment API with ownership checks
-- Responsive client layout
+## Features
 
-This is an in-progress portfolio project, not a production service. The source has been reviewed, but installation, build, and end-to-end testing are still pending.
+- Account registration, bcrypt password hashing, and expiring JWT sessions
+- Employee, technician, and administrator permissions enforced by the API
+- Ticket creation, search, priority filters, and status filters
+- Technician assignment, status updates, comments, and activity history
+- Equipment inventory with assignment, maintenance, and retirement
+- Admin screen for changing account roles
+- Overview counts by status, category, and priority
+- Responsive forms, loading states, and API error messages
+- GitHub Actions API integration tests and production client build
 
-## Run locally
+## Quick start
 
-Install Node.js 22.12 or newer with npm, then clone:
+Use Node.js 22.12 or later in the Node 22 release line and npm.
 
 ```sh
 git clone https://github.com/jenilkumar1301/help-desk.git
-cd help-desk/server
-npm install
+cd help-desk
+npm install --prefix server
+npm install --prefix client
+```
+
+Configure the API:
+
+```sh
+cd server
 cp .env.example .env
 node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 ```
 
-Copy the generated value into JWT_SECRET in server/.env. Keep it private. No default accounts or passwords are included.
+Paste the generated value after JWT_SECRET= in server/.env. Never commit this file. No reusable passwords or default accounts are included.
 
-Start the API:
+Start the server from server/:
 
 ```sh
 npm run dev
 ```
 
-In another terminal, from the repository root:
+In a second terminal, from help-desk/client/:
 
 ```sh
-cd client
-npm install
 npm run dev
 ```
 
-Open the local address printed by Vite. The default client address is http://localhost:5173 and the API uses port 4000. If the client port changes, update CLIENT_URL in server/.env and restart the API.
+Open the address printed by Vite, normally http://localhost:5173. The API uses http://localhost:4000/api.
 
-Register an employee account from the login page. The database is created automatically in the server working directory.
+If Vite chooses another port, update CLIENT_URL in server/.env and restart the API. For a different API address, set VITE_API_URL in client/.env before starting or building the client.
 
-To check the client build:
+SQLite creates help-desk.db in the server working directory. Always run server commands there so they use the same database. Back up that database if you want to keep your demo data.
+
+## Create your first administrator
+
+1. Register your account through the app.
+2. In another terminal, from server/, run the following with the email you registered:
 
 ```sh
-npm run build
+npm run promote -- your-email@example.com admin
 ```
 
-Run that command from client/. Dependency lockfiles have not yet been generated; commit them after a successful install.
+3. Refresh the app. The People screen is now available.
+4. Register a second account and use People to grant it technician access.
 
-## Roles
+The local promotion command requires access to the server machine. Public registration always creates an employee. Current roles are read from the database on every authenticated request, so demoting staff removes API access immediately. Administrators cannot change their own role in the UI.
 
-Public registration always creates an employee. Technician promotion tooling is not implemented yet, so the technician API cannot currently be exercised using registration alone. Role changes must not be exposed through public registration.
+## Demo walkthrough
 
-## API
+1. Sign in as an employee and create a Network ticket with high priority.
+2. Sign in as a technician in another browser profile or private window.
+3. Open the support queue, assign the ticket, and mark it in progress.
+4. Add a troubleshooting comment and inspect the activity history.
+5. Add a laptop in Equipment and assign it to the employee.
+6. Return to the employee account: the ticket conversation and assigned laptop are visible.
+7. Resolve the ticket and inspect Overview.
+8. Search for the asset and retire it when no longer in use.
 
-All ticket endpoints require an Authorization: Bearer token header.
+Overview is a snapshot of current tickets, not a historical SLA or resolution-time report. Employee counts include only their own tickets.
 
-| Method | Endpoint | Access |
+## Verification
+
+```sh
+npm test --prefix server
+npm run build --prefix client
+```
+
+GitHub Actions runs these checks on main pushes and pull requests. The API tests use an isolated in-memory database and randomly generated test credentials.
+
+The [verified workflow run](https://github.com/jenilkumar1301/help-desk/actions/runs/34883663626) passed dependency installation, API integration tests, and the React production build. Browser interaction and visual checks have not yet been performed.
+
+Test coverage includes account validation, ticket ownership, comments and history access, staff-only mutations, asset visibility, duplicate tags, role escalation, immediate demotion, and JSON errors.
+
+Dependency lockfiles are not committed yet. After installing locally, commit the generated server/package-lock.json and client/package-lock.json to make dependency resolution repeatable.
+
+## Project structure
+
+- client/src/components — authentication, tickets, equipment, and people screens
+- client/src/App.jsx — navigation, session checks, ticket list, and overview
+- server/src/routes — account, ticket, asset, and user APIs
+- server/src/middleware — authentication and role checks
+- server/src/database.js — SQLite schema and indexes
+- server/src/scripts/promote.js — local role administration
+- server/test/api.test.js — API integration tests
+
+## API summary
+
+All routes below except registration, login, and health require a Bearer token.
+
+| Method | Route | Purpose |
 | --- | --- | --- |
-| POST | /api/auth/register | Public |
-| POST | /api/auth/login | Public |
-| GET | /api/health | Public |
-| GET | /api/tickets | Own tickets for employees; all for technicians |
-| POST | /api/tickets | Signed-in users |
-| PATCH | /api/tickets/:id | Technicians and admins |
-| GET | /api/tickets/:id/comments | Ticket owner or staff |
-| POST | /api/tickets/:id/comments | Ticket owner or staff |
+| POST | /api/auth/register | Register employee |
+| POST | /api/auth/login | Sign in |
+| GET | /api/auth/me | Read current account |
+| GET | /api/health | Health check |
+| GET / POST | /api/tickets | List visible tickets / create request |
+| GET / PATCH | /api/tickets/:id | Read ticket / staff update |
+| GET / POST | /api/tickets/:id/comments | Read / add comments |
+| GET | /api/tickets/:id/activity | Read change history |
+| GET / POST | /api/assets | List visible assets / staff creation |
+| PUT | /api/assets/:id | Staff asset update |
+| GET | /api/users | Staff user directory |
+| PATCH | /api/users/:id/role | Admin role update |
 
-## Next milestones
+## Scope and deployment notes
 
-- Technician account administration
-- Ticket detail, comment, and status-update interface
-- Asset inventory
-- Ticket activity history
-- Automated authorization and validation tests
-- Login rate limiting and deployment hardening
+This is a portfolio MVP. Run it locally for demonstrations. It has not been deployed.
 
-JWTs currently use browser local storage, which makes preventing cross-site scripting especially important. Do not deploy this version with sensitive data.
+Tokens are stored in browser local storage and expire after eight hours; logout clears the browser token rather than revoking it server-side. Before using real organizational data, review session storage, HTTPS, database backups, and deployment-specific security. The authentication limiter is per-process and needs a shared store for multiple API instances. Password reset, email verification, attachments, and SLA reporting are outside this version.
 
-## Manual checks still to run
+## Resume description
 
-1. Register and sign in; verify invalid credentials are rejected.
-2. Create a ticket, refresh, and confirm persistence.
-3. Search and filter tickets, including closed tickets.
-4. Create a second account and verify the first account's tickets are hidden.
-5. Using the API, verify the second account cannot read or add comments to the first account's ticket.
-6. Verify an employee cannot PATCH a ticket or assign themselves a privileged role.
-7. Stop the API and verify the dashboard displays an error.
-8. Check the layout on a narrow screen and run the production client build.
+Built a full-stack IT help desk application with React, Express, and SQLite, implementing role-based access, ticket assignment and activity history, equipment tracking, and automated API integration tests.
