@@ -77,6 +77,11 @@ router.patch("/:id", requireTechnician, (req, res) => {
 });
 
 router.get("/:id/comments", (req, res) => {
+  const ticket = db.prepare("SELECT * FROM tickets WHERE id = ?").get(req.params.id);
+  if (!ticket) return res.status(404).json({ message: "Ticket not found." });
+  if (req.user.role === "employee" && ticket.requester_id !== req.user.id) {
+    return res.status(403).json({ message: "You cannot access this ticket." });
+  }
   const comments = db.prepare(`
     SELECT comments.*, users.name AS author_name, users.role AS author_role
     FROM comments JOIN users ON users.id = comments.user_id
