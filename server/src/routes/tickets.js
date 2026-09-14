@@ -43,9 +43,9 @@ router.get("/", (req, res) => {
 });
 
 router.post("/", (req, res) => {
-  const { title, description, category = "Other", priority = "medium" } = req.body;
+  const { title, description, category = "Other", priority = "medium" } = (req.body || {});
 
-  if (!title?.trim() || !description?.trim()) {
+  if (typeof title !== "string" || !title.trim() || title.length > 200 || typeof description !== "string" || !description.trim() || description.length > 10000 || !["low", "medium", "high", "urgent"].includes(priority) || !["Hardware", "Software", "Network", "Access", "Other"].includes(category)) {
     return res.status(400).json({ message: "Title and description are required." });
   }
 
@@ -65,7 +65,15 @@ router.patch("/:id", requireTechnician, (req, res) => {
 
   const status = req.body.status ?? ticket.status;
   const priority = req.body.priority ?? ticket.priority;
-  const assigneeId = req.body.assigneeId ?? ticket.assignee_id;
+  const assigneeId = req.body.assigneeId === undefined ? ticket.assignee_id : req.body.assigneeId;
+  if (!["open", "in_progress", "resolved", "closed"].includes(status) ||
+      !["low", "medium", "high", "urgent"].includes(priority)) {
+    return res.status(400).json({ message: "Invalid status or priority." });
+  }
+  if (assigneeId !== null && (!Number.isInteger(assigneeId) ||
+      !db.prepare("SELECT id FROM users WHERE id = ? AND role IN ('technician', 'admin')").get(assigneeId))) {
+    return res.status(400).json({ message: "Assignee must be a technician." });
+  }
 
   db.prepare(`
     UPDATE tickets
@@ -91,8 +99,8 @@ router.get("/:id/comments", (req, res) => {
 });
 
 router.post("/:id/comments", (req, res) => {
-  const body = req.body.body?.trim();
-  if (!body) return res.status(400).json({ message: "Comment cannot be empty." });
+  const body = typeof req.body?.body === "string" ? req.body.body.trim() : "";
+  if (!body || body.length > 5000) return res.status(400).json({ message: "Comment cannot be empty." });
 
   const ticket = db.prepare("SELECT * FROM tickets WHERE id = ?").get(req.params.id);
   if (!ticket) return res.status(404).json({ message: "Ticket not found." });
