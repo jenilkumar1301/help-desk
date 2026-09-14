@@ -69,12 +69,13 @@ function TicketForm({ onCreated, onCancel }) {
 function Dashboard({ user, onLogout }) {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
 
   useEffect(() => {
-    api("/tickets").then(setTickets).finally(() => setLoading(false));
+    api("/tickets").then(setTickets).catch(err => setError(err.message)).finally(() => setLoading(false));
   }, []);
 
   const visible = useMemo(() => tickets.filter(ticket =>
@@ -91,8 +92,8 @@ function Dashboard({ user, onLogout }) {
   return <div className="app-shell">
     <aside>
       <div className="brand"><span>HD</span><strong>Help Desk</strong></div>
-      <nav><button className="active">▦ Dashboard</button><button>◎ My tickets</button><button>▣ Assets</button></nav>
-      <div className="profile"><div className="avatar">{user.name[0]}</div><div><strong>{user.name}</strong><small>{user.role}</small></div><button onClick={onLogout}>↪</button></div>
+      <nav><button className="active" onClick={() => { setCreating(false); setStatus("all"); setQuery(""); }}>▦ Dashboard</button></nav>
+      <div className="profile"><div className="avatar">{user.name[0]}</div><div><strong>{user.name}</strong><small>{user.role}</small></div><button onClick={onLogout} aria-label="Sign out">↪</button></div>
     </aside>
     <main className="dashboard">
       <header><div><p className="eyebrow">SUPPORT CENTER</p><h1>Good day, {user.name.split(" ")[0]}</h1><p>Track requests and keep your work moving.</p></div><button className="primary" onClick={() => setCreating(true)}>＋ New ticket</button></header>
@@ -101,18 +102,22 @@ function Dashboard({ user, onLogout }) {
         <article><span className="stat-icon amber">●</span><div><small>In progress</small><strong>{stats.progress}</strong></div></article>
         <article><span className="stat-icon green">●</span><div><small>Resolved</small><strong>{stats.resolved}</strong></div></article>
       </section>
+      {error && <div className="error" role="alert">{error} Try signing in again if your session has expired.</div>}
       {creating ? <TicketForm onCancel={() => setCreating(false)} onCreated={ticket => { setTickets([ticket, ...tickets]); setCreating(false); }} /> :
       <section className="tickets">
-        <div className="section-heading"><div><h2>Recent tickets</h2><p>Your latest support activity</p></div><div className="filters"><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search tickets…" /><select value={status} onChange={e => setStatus(e.target.value)}><option value="all">All statuses</option><option value="open">Open</option><option value="in_progress">In progress</option><option value="resolved">Resolved</option></select></div></div>
+        <div className="section-heading"><div><h2>Recent tickets</h2><p>Your latest support activity</p></div><div className="filters"><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search tickets…" /><select value={status} onChange={e => setStatus(e.target.value)}><option value="all">All statuses</option><option value="open">Open</option><option value="in_progress">In progress</option><option value="resolved">Resolved</option><option value="closed">Closed</option></select></div></div>
         {loading ? <p className="empty">Loading tickets…</p> : visible.length === 0 ? <div className="empty"><strong>No tickets found</strong><p>Create a ticket when you need help from IT.</p></div> :
-        <div className="ticket-list">{visible.map(ticket => <article className="ticket" key={ticket.id}><div><span className="ticket-id">#{String(ticket.id).padStart(4, "0")}</span><h3>{ticket.title}</h3><p>{ticket.description}</p><small>{ticket.category} · {new Date(ticket.created_at).toLocaleDateString()}</small></div><div className="badges"><span className={`badge ${ticket.priority}`}>{ticket.priority}</span><span className="badge status">{ticket.status.replace("_", " ")}</span></div></article>)}</div>}
+        <div className="ticket-list">{visible.map(ticket => <article className="ticket" key={ticket.id}><div><span className="ticket-id">#{String(ticket.id).padStart(4, "0")}</span><h3>{ticket.title}</h3><p>{ticket.description}</p><small>{ticket.category} · {new Date(ticket.created_at.replace(" ", "T") + "Z").toLocaleDateString()}</small></div><div className="badges"><span className={`badge ${ticket.priority}`}>{ticket.priority}</span><span className="badge status">{ticket.status.replace("_", " ")}</span></div></article>)}</div>}
       </section>}
     </main>
   </div>;
 }
 
 export default function App() {
-  const [user, setUser] = useState(() => JSON.parse(localStorage.getItem("helpDeskUser") || "null"));
-  function logout() { localStorage.clear(); setUser(null); }
+  const [user, setUser] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("helpDeskUser") || "null"); }
+    catch { return null; }
+  });
+  function logout() { localStorage.removeItem("helpDeskToken"); localStorage.removeItem("helpDeskUser"); setUser(null); }
   return user ? <Dashboard user={user} onLogout={logout} /> : <Auth onAuthenticated={setUser} />;
 }
