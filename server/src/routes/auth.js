@@ -2,6 +2,7 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import db from "../database.js";
+import { requireAuth } from "../middleware/auth.js";
 
 const router = Router();
 const publicUser = "id, name, email, role, created_at";
@@ -57,5 +58,7 @@ router.post("/login", async (req, res) => {
   const { password_hash, ...safeUser } = user;
   return res.json({ token: issueToken(safeUser), user: safeUser });
 });
+
+router.get("/me", requireAuth, (req, res) => res.json(req.user));
 
 export default router;

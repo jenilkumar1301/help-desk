@@ -46,4 +46,26 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_tickets_requester ON tickets(requester_id);
 `);
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS activity (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    message TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_activity_ticket ON activity(ticket_id);
+  CREATE INDEX IF NOT EXISTS idx_comments_ticket ON comments(ticket_id);
+  CREATE TABLE IF NOT EXISTS assets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tag TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL,
+    status TEXT NOT NULL CHECK(status IN ('available', 'assigned', 'maintenance', 'retired')),
+    assigned_to INTEGER REFERENCES users(id),
+    notes TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+`);
 export default db;
