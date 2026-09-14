@@ -15,11 +15,11 @@ function issueToken(user) {
 }
 
 router.post("/register", async (req, res) => {
-  const name = req.body.name?.trim();
-  const email = req.body.email?.trim().toLowerCase();
-  const password = req.body.password;
+  const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+  const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+  const password = req.body?.password;
 
-  if (!name || !email || !password || password.length < 8) {
+  if (!name || name.length > 100 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 || typeof password !== "string" || password.length < 8 || Buffer.byteLength(password, "utf8") > 72) {
     return res.status(400).json({
       message: "Name, email, and a password of at least 8 characters are required."
     });
@@ -44,7 +44,10 @@ router.post("/register", async (req, res) => {
 });
 
 router.post("/login", async (req, res) => {
-  const email = req.body.email?.trim().toLowerCase();
+  const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+  if (!email || typeof req.body?.password !== "string") {
+    return res.status(400).json({ message: "Email and password are required." });
+  }
   const user = db.prepare("SELECT * FROM users WHERE email = ?").get(email);
 
   if (!user || !(await bcrypt.compare(req.body.password || "", user.password_hash))) {
